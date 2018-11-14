@@ -1,4 +1,6 @@
 import collections
+import jieba_fast as cjieba
+
 
 
 # def maybe_download(filename, expected_bytes):
@@ -21,7 +23,7 @@ import collections
 #         data = tf.compat.as_str(f.read(f.namelist()[0])).split()
 #     return data
 
-def read_data(file_name):
+def read_data_ancient(file_name):
     """
     read poem and do word segmentation
 
@@ -42,8 +44,22 @@ def read_data(file_name):
     return data
 
 def read_data_modern(file_name):
-    pass
+    data = list()
+    with open(file_name, "r") as fp:
+        while True:
+            line = fp.readline()
+            if len(line) == 0:
+                break
+            line = line.strip()
+            word_list = line.split(",")
+            data.extend(word_list)
+    return data
 
+def read_data(file_name, mode="ancient"):
+    if mode=="ancient":
+        return read_data_ancient(file_name)
+    else:
+        return read_data_modern(file_name)
 
 def build_dataset(words, vocabulary_size):
     """

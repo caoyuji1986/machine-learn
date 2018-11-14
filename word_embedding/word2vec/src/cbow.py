@@ -3,6 +3,7 @@ import data_prepare as dp
 import numpy as np
 import random
 import shutil
+import os
 
 class CBow:
     def __init__(self, vocabulary_size,
@@ -80,20 +81,25 @@ class CBow:
             self.__normalized_embedding = onehot_lookup_tables / norm
 
     def save(self, sess, dst_path):
-        shutil.rmtree(dst_path)
+        if os.path.exists(dst_path):
+            shutil.rmtree(dst_path)
         with self.__graph.as_default():
-            x = self.__featurePlaceHolder
+            x = tf.placeholder(dtype=tf.int32, shape=[None])
             y = tf.nn.embedding_lookup(self.__normalized_embedding, x)
-            x_similiar = self.__normalized_embedding.dot(y.T)
+
+            x_similiar_score = tf.tensordot(self.__normalized_embedding,tf.transpose(y), 1)
 
             x_tensor_info = tf.saved_model.utils.build_tensor_info(x)
             y_tensor_info = tf.saved_model.utils.build_tensor_info(y)
-            x_similiar_info = tf.saved_model.utils.build_tensor_info(x_similiar)
-
+            x_similiar_score_info = tf.saved_model.utils.build_tensor_info(x_similiar_score)
             signature_map = tf.saved_model.signature_def_utils.build_signature_def(
-                inputs={"word": x_tensor_info},
-                outputs={"embedding": y_tensor_info,
-                         "most_similiar": x_similiar_info},
+                inputs={
+                    "word": x_tensor_info
+                },
+                outputs={
+                    "embedding": y_tensor_info,
+                    "x_similiar_score": x_similiar_score_info
+                },
                 method_name=tf.saved_model.signature_constants.PREDICT_METHOD_NAME
             )
             builder = tf.saved_model.builder.SavedModelBuilder(dst_path)
@@ -112,10 +118,22 @@ class CBow:
         signature = meta_graph_def.signature_def
         x_tensor_name = signature['word_embedding'].inputs['word'].name
         y_tensor_predict = signature['word_embedding'].outputs['embedding'].name
+        x_most_similiar = signature['word_embedding'].outputs['x_similiar_score'].name
 
         # 获取tensor 并inference
-        self.__raw_input = graph.get_tensor_by_name(x_tensor_name)
-        self.__classification_output = graph.get_tensor_by_name(y_tensor_predict)
+        self.__x_tensor = graph.get_tensor_by_name(x_tensor_name)
+        self.__embedding_tensor = graph.get_tensor_by_name(y_tensor_predict)
+        self.__x_most_similiar_tensor = graph.get_tensor_by_name(x_most_similiar)
+
+    def inference(self, word):
+        y, x_most_similiar = self.__session.run([self.__embedding_tensor, self.__x_most_similiar_tensor], feed_dict={
+            self.__x_tensor: word
+        })
+        print('----------------')
+        print("x: {}".format(word))
+        print("y: {}".format(y))
+        print("x_most_similiar_score: {} ".format(x_most_similiar.T))
+        return x_most_similiar.T, y
 
     def show_result(self, embeddings, reverse_dictionary, top_k):
         valid_size = 16
